@@ -1,0 +1,34 @@
+Jakub Cichon
+Spring 2013
+CS3254
+Professor Sterling
+
+#Twitter
+
+
+Layout of the application
+	In the main directory there are PHP files for the front end and server.c file that contains the back-end. Inside this directory there are two sub-directories called rep1 and rep2. Each sub-directory contains server code and files to store client data. 
+
+Invocation
+	Back-End
+		I wrote a shell script that makes the server code in all directories. It is called "makeall.sh". Simply navigate to the main directory i.e. "/twitter_final/" and invoke the script. I also wrote a script that starts all servers, called "startServers.sh". The script takes in a port name and starts 3 gnome-terminal windows, each one executing a server. The script accepts 1 argument "arg", a port number. It then generates 2 more port numbers of values arg+1 and arg+2.
+
+		Each server invocation has the following format: ./server myPort otherPort1 otherPort2             , where myPort is the port on which the server is running.
+
+	IMPORTANT: Make sure that your terminal is held open when the command exits. On your terminal window go to Edit > Profile Preferences > Title and Command. From the drop-down menu next to "When command exits:" click on "Hold the terminal open."
+
+
+	Front-End
+		In the main directory open "ports.txt" and type in the port numbers of the back-end servers separated by semicolons from lowest to greatest. There must be a semicolon after the last entry. DO NOT leave any trailing whitespace.
+		For ex. If "sh startServers.sh 5555" is executed, then "5555;5556;5557;" should be written to ports.txt
+
+
+Approach: Passive
+	When the front-end connects to the primary (I'll explain election process below) to things can happen:
+		On read: the primary simply returns the value that the front-end has requested, no logging is done.
+		On write: the primary logs the request, executes it, passes the request down to the back-ups, waits for confirmations and then returns a confirmation to the client. Everything on the back-end side is timed so that failure can be easily detected. In case of a failure followed by a write, logs are checked to ensure that a given request hasn't been written twice. Each piece of information written to the servers is uniquely identified by a random hash done on the front end side. Logs are checked by hash and contents of the request so that even if two completely different programs had the same hash, they will be recognized as two different entities.
+
+	Election
+		When the front-end doesn't receive an acknowledgement from the back-end it starts an election process. It notifies one of the back-up servers, requests the election process to take place, it passes on a port number of the primary server that had died in case that a server hasn't killed it off. The back-up then chooses a candidate with the highest port number, notifies all the other back-ups of who the primary is and waits for them to respond. The successor of the primary assumes his role before acknowleding the polling server. The polling server then responds to the front-end with the port number of the new primary. The message that hasn't been originally sent from the front-end to the (now dead) primary, is sent again.
+
+	This system does not support reincarnations. Once a server dies, it is forgotten by the other servers.

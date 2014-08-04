@@ -1,0 +1,4 @@
+#!/bin/sh
+make
+make -C /rep1
+make -C /rep2
