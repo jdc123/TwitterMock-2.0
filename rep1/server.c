@@ -525,7 +525,6 @@ int verifyRegistration(char uname[USERNAME_SIZE], char pwd[MD5_SIZE]){
 int verifyLogin(char uname[USERNAME_SIZE], char pwd[MD5_SIZE]){
 	//Checks if the user exists in the credentials file. If he does exist, 1 is returned, else 0.
 	FILE * fp;
-	pthread_mutex_lock(&credentialsMutex);
 	if ((fp = fopen(CREDENTIALS_FILE, "r")) == NULL)
 	{
 		perror("Couldn't open file");
@@ -549,7 +548,6 @@ int verifyLogin(char uname[USERNAME_SIZE], char pwd[MD5_SIZE]){
 				perror("Close failed.");
 				exit(FCLOSE_FAILED);
 			}
-			pthread_mutex_unlock(&credentialsMutex);
 			return 1; //Match found
 		}
 	}
@@ -558,13 +556,11 @@ int verifyLogin(char uname[USERNAME_SIZE], char pwd[MD5_SIZE]){
 		perror("Close failed.");
 		exit(FCLOSE_FAILED);
 	}
-	pthread_mutex_unlock(&credentialsMutex);
 	return 0; //Didn't find a match
 }       
 void listFollowees(char uname[USERNAME_SIZE], int clientSock){
 	//Sends a message containing usernames of uname's followees (one at a time) to the clientSock
 	FILE * fp;
-	pthread_mutex_lock(&followeesMutex);
 	if ((fp = fopen(FOLLOWEES_FILE, "r")) == NULL)
 	{
 		perror("Couldn't open file");
@@ -604,12 +600,10 @@ void listFollowees(char uname[USERNAME_SIZE], int clientSock){
 		perror("Close failed.");
 		exit(FCLOSE_FAILED);
 	}
-	pthread_mutex_unlock(&followeesMutex);
 }
 void loadFollowees(char uname[USERNAME_SIZE], char ***followees, int *size){
 	//Store all the usernames that uname is following (excluding his own uname) into followees
 	FILE * fp;
-	pthread_mutex_lock(&followeesMutex);
 	if ((fp = fopen(FOLLOWEES_FILE, "r")) == NULL)
 	{
 		perror("Couldn't open file");
@@ -659,13 +653,11 @@ void loadFollowees(char uname[USERNAME_SIZE], char ***followees, int *size){
 		perror("Close failed.");
 		exit(FCLOSE_FAILED);
 	}
-	pthread_mutex_unlock(&followeesMutex);
 }
 void listOthers(char uname[USERNAME_SIZE], char **followees, int clientSock, int size){
 	//Sends all usernames that uname is not following (excluding his own uname) to the clientSock
 	
 	FILE * fp;
-	pthread_mutex_lock(&credentialsMutex);
 	if ((fp = fopen(CREDENTIALS_FILE, "r")) == NULL)
 	{
 		perror("Couldn't open file");
@@ -706,12 +698,10 @@ void listOthers(char uname[USERNAME_SIZE], char **followees, int clientSock, int
 		perror("Close failed.");
 		exit(FCLOSE_FAILED);
 	}
-	pthread_mutex_unlock(&credentialsMutex);
 }
 void listTweets(char uname[USERNAME_SIZE], char **followees, int clientSock, int size){
 	//sends all of uname's tweets as well as all tweets of followees to the clientSock
 	FILE * fp;
-	pthread_mutex_lock(&tweetsMutex);
 	if ((fp = fopen(TWEETS_FILE, "r")) == NULL)
 	{
 		perror("Couldn't open file");
@@ -752,7 +742,6 @@ void listTweets(char uname[USERNAME_SIZE], char **followees, int clientSock, int
 		perror("Close failed.");
 		exit(FCLOSE_FAILED);
 	}
-	pthread_mutex_unlock(&tweetsMutex);
 }
 int getPortNumber(char* portString){
 //Converts port number from string and check if it's valid (taken from my HW#7 from CS239)
