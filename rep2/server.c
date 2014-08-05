@@ -23,7 +23,7 @@
  #define IP_NUM_FIELDS 4 //Number of fields in an IP Address separated by .
  #define IP_LOW_END 0 //Lowest allowed value of an IP field
  #define IP_HIGH_END 255 //Highest allowed value of an IP field
- #define BACKLOG 1
+ #define BACKLOG 100
  
  //Server application related constants
  //Basic
@@ -50,8 +50,12 @@
  #define NUM_FIELDS_TWEETS 3 		//userName + timeStamp + tweet
  
  //Response/Request
+ #define MAX_RESPONSE_SIZE 1024 //Server --> Client (TWEET_ENTRY_SIZE is the longest entry)
+ #define MAX_REQUEST_SIZE 1024
+/*
  #define MAX_RESPONSE_SIZE (TWEET_ENTRY_SIZE) //Server --> Client (TWEET_ENTRY_SIZE is the longest entry)
  #define MAX_REQUEST_SIZE (MAX_UNIQUE_ID_LENGTH + WHITE_SPACE_SIZE + MAX_REQUEST_STRING_LENGTH + WHITE_SPACE_SIZE + USERNAME_SIZE + WHITE_SPACE_SIZE) //Client --> Server
+*/
 
  //Time
  #define TIMEOUT 5 //in seconds
@@ -217,7 +221,7 @@ int main(int argc, char *argv[]){
 		pthread_t tid1;
 		//pthread_create(&tid1, NULL, getInput, &connBundle);
 		//1. Request: The front end issues the request, containing a unique identifier, to the primary replica manager.
-		pthread_create(&tid1, NULL, getInput, (void*)(intptr_t)clientSock);
+		pthread_create(&tid1, NULL, getInput, (void*)clientSock);
 		
 	}
 	return 0;
@@ -226,7 +230,7 @@ int main(int argc, char *argv[]){
 void* getInput(void *args){
 	//Receives a client socket and calls functions that send the response back to the client 
 	//or closes the socket if no data is received 
-	int clientSock = (int)(intptr_t)args;
+	int clientSock = (int)args;
 	struct connection_bundle connBundle;
 	initConnectionBundle(&connBundle);
 	
@@ -241,7 +245,7 @@ void* getInput(void *args){
 	if((readSize = recv(clientSock, request, MAX_REQUEST_SIZE, 0)) < 0)
 	{
 		perror("Recv failed.");
-		exit(RECV_FAILED);
+		//exit(RECV_FAILED);
 	}
 	//If client did not send anything
 	else if(readSize == 0)
@@ -250,7 +254,7 @@ void* getInput(void *args){
 		if(close(clientSock) == -1)
 		{
 			perror("Close failed.");
-			exit(CLOSE_FAILED);
+			//exit(CLOSE_FAILED);
 		}
 	}
 	else
@@ -259,17 +263,17 @@ void* getInput(void *args){
 		
 		//Store a copy of the request for ater use in sendResponse function
 		char reqCopy[MAX_REQUEST_SIZE];
-		if(snprintf(reqCopy, MAX_REQUEST_SIZE, "%s", request) < 0)
+		if(snprintf(reqCopy, MAX_RESPONSE_SIZE, "%s", request) < 0)
 		{
 			perror("Snprintf failed.");
 			exit(SNPRINTF_FAILED);
 		}
 		
-		printf("Request: %s", request);
-		//remove preceding whitespace
+		//Find the location of the first whitespace (after hash) and increment the filteredRequest pointer to point to the beginning of the actual request without the hash
 		char *filteredRequest;
 		filteredRequest = strchr(request, SEPARATOR_CHAR);
-		filteredRequest++; 
+		filteredRequest++;
+		printf("Request: %s\n", filteredRequest);
 		
 		//Tokenize request
 		tokenize(allTokens, filteredRequest, SEPARATOR);
@@ -281,15 +285,15 @@ void* getInput(void *args){
 			free(allTokens[i]);
 		}
 			
-		//Clear buffers
-		bzero(request, MAX_REQUEST_SIZE);
-		bzero(response, MAX_RESPONSE_SIZE);
+		//Clear buffers -- not needed, previously used for debugging
+		//bzero(request, MAX_REQUEST_SIZE);
+		//bzero(response, MAX_RESPONSE_SIZE);
 		
 		//Close socket
 		if(close(clientSock) == -1)
 		{
 			perror("Close failed.");
-			exit(CLOSE_FAILED);
+			//exit(CLOSE_FAILED);
 		}
 		puts("Closed a socket.");
 	}
@@ -753,11 +757,32 @@ int getPortNumber(char* portString){
 	}
 	return port;
 }
-void tokenize(char *allTokens[], char *input, char* delimeter){
+/*
+ * void tokenize(char *allTokens[], char *input, char* delimeter){
 	//Tokenize user input
 	char *p = NULL;	
 	int ind = 0;	
 	for(p = strtok(input, delimeter); p; p = strtok(NULL, delimeter))
+	{
+		char* oneToken = (char*)malloc(strlen(p)+1);
+		if(oneToken == NULL){
+			perror("Failed to malloc.");
+			exit(MALLOC_FAILED);
+		}
+		strncpy(oneToken, p, strlen(p)+1);
+		allTokens[ind] = oneToken;
+		ind++;
+	}
+	
+	allTokens[ind] = 0;
+}
+*/
+void tokenize(char *allTokens[], char *input, char* delimeter){
+	//Tokenize user input
+	char *p = NULL;	
+	int ind = 0;
+	char* savePtr;
+	for(p = strtok_r(input, delimeter, &savePtr); p; p = strtok_r(NULL, delimeter, &savePtr))
 	{
 		char* oneToken = (char*)malloc(strlen(p)+1);
 		if(oneToken == NULL){
@@ -808,7 +833,7 @@ void sendResponse(char *allTokens[], char response[MAX_RESPONSE_SIZE], struct co
 			{
 				//3. Execution: The primary executes the request and stores the response.
 				//Execute update
-				pthread_mutex_lock(&updateMutex);
+				
 				handleUpdate(allTokens, response);
 				//Log Response
 				addLog(request);
@@ -825,7 +850,7 @@ void sendResponse(char *allTokens[], char response[MAX_RESPONSE_SIZE], struct co
 					perror("Send Failed.");
 					//exit(SEND_FAILED);
 				}
-				pthread_mutex_unlock(&updateMutex);
+				
 				
 				
 			}	  
@@ -840,7 +865,6 @@ void sendResponse(char *allTokens[], char response[MAX_RESPONSE_SIZE], struct co
 	}
 	else if((strncmp(allTokens[0], "GET_PRIMARY", strlen(allTokens[0])) == 0))
 	{	
-		pthread_mutex_lock(&electionMutex);
 		int target = (int)atoi(allTokens[1]);
 		printf("Target: %s", allTokens[1]);
 		puts(request);
@@ -899,21 +923,19 @@ void sendResponse(char *allTokens[], char response[MAX_RESPONSE_SIZE], struct co
 		{
 			perror("Send Failed.");
 		}
-		pthread_mutex_unlock(&electionMutex);
 	}
 	else if((strncmp(allTokens[0], "APPOINT", strlen(allTokens[0])) == 0))
 	{
 		int newPort = atoi(allTokens[1]);
-		pthread_mutex_lock(&myPortMutex);
 		int myPort = MY_PORT;
-		pthread_mutex_lock(&myPortMutex);
-		pthread_mutex_lock(&isPrimaryMutex);
 		PRIMARY = newPort;
 		if(myPort == PRIMARY)
 		{
+			pthread_mutex_lock(&isPrimaryMutex);
 			IS_PRIMARY = 1;
+			pthread_mutex_unlock(&isPrimaryMutex);
 		}
-		pthread_mutex_unlock(&isPrimaryMutex);
+		
 	}
 	else{
 			exit(INVALID_SELECTION);
@@ -991,10 +1013,7 @@ int sendToBackup(int *portGlobal, pthread_mutex_t *mut, char request[MAX_REQUEST
 	//message is sent from primary to a backup, and acknowledged by the backup
 	int otherPort;
 	struct sockaddr_in other;
-
-	pthread_mutex_lock(mut);
 	otherPort = (*portGlobal);
-	pthread_mutex_unlock(mut);
 	//printf("What port? %i\n", otherPort);
 	if(otherPort != -1){
 		//If port is alive (could be invalidated if dead) then get sockets
@@ -1216,7 +1235,6 @@ void addLog(char request[MAX_REQUEST_SIZE]){
 int checkLog(char request[MAX_REQUEST_SIZE]){
 	//check if a given request exists in the log
 	FILE * fp;
-	pthread_mutex_lock(&logMutex);
 	if ((fp = fopen(LOG_FILE, "r")) == NULL)
 	{
 		perror("Couldn't open file");
@@ -1234,7 +1252,6 @@ int checkLog(char request[MAX_REQUEST_SIZE]){
 				perror("Close failed.");
 				exit(FCLOSE_FAILED);
 			}
-			pthread_mutex_unlock(&logMutex);
 			return 1; //Match found
 		}
 	}
@@ -1243,7 +1260,6 @@ int checkLog(char request[MAX_REQUEST_SIZE]){
 		perror("Close failed.");
 		exit(FCLOSE_FAILED);
 	}
-	pthread_mutex_unlock(&logMutex);
 	return 0; //Didn't find a match
 }
 int killPort(int target){

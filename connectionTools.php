@@ -40,13 +40,13 @@ function notWhiteSpace($str)
 	return !(ctype_space($str));
 }
 //Main connection func that returns a response in form of an array after
-//connection is established
+//connection is established --Add event handler for failed socket in the future.
 function getFromServer($requestString)
 {
 	//Connection information
 	$protIP = "tcp://127.0.0.1";
 	$portsFile = "ports.txt";
-	$timeout = 2; //in seconds
+	$timeout = 10; //in seconds
 	
 	//Deserialize ports
 	$ports = getPorts($portsFile);
@@ -86,7 +86,7 @@ function getFromServer($requestString)
 		//Get election response
 		$r = getResponse($fp);
 		
-		//Remove faulty ports
+		//Remove faulty ports --improve in the future by wrapping write access with a mutex
 		$contents = "";
 		for($i = 0; $i <= $last_ind; $i++)
 		{
